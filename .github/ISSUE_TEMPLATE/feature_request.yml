@@ -1,0 +1,38 @@
+name: Feature request
+description: Something the client should do, or a provider it should support.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        `docs/limitations.md` lists what this deliberately does not do, each
+        with the condition that would trigger building it. If your request is
+        already there, saying so is the most useful thing you can add: those
+        triggers are waiting for somebody to meet them.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What goes wrong today
+      description: >
+        Ideally in terms of requests spent or alerts not enriched, since that
+        is the constraint this library is organised around.
+    validations:
+      required: true
+
+  - type: textarea
+    id: quota
+    attributes:
+      label: What it would cost in requests
+      description: >
+        Anything that sends a request spends from the same allowance as a
+        hedge and a retry. If your proposal spends more, say roughly how much:
+        that is the part of a proposal that usually decides it.
+
+  - type: input
+    id: provider
+    attributes:
+      label: If this is a new provider, a link to its rate limit documentation
+      description: >
+        A preset is only added from documentation that was read, with the date
+        recorded on it.

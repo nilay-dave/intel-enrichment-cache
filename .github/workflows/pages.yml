@@ -1,0 +1,66 @@
+name: pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# One workflow owns gh-pages, so the site and the badge endpoints cannot race
+# to push to the same branch and leave the loser failing on a non fast forward.
+concurrency:
+  group: gh-pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install
+        run: |
+          python -m pip install -e ".[dev]"
+          python -m pip install mkdocs-material
+
+      - name: Measure coverage
+        id: measure
+        run: |
+          python -m pytest --cov=iec --cov-report=xml --quiet
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import xml.etree.ElementTree as ET
+          rate = float(ET.parse("coverage.xml").getroot().get("line-rate"))
+          print(f"coverage={rate * 100:.1f}")
+          PY
+
+      - name: Build the site
+        run: python -m mkdocs build --strict --site-dir public
+
+      - name: Write the badge endpoints into the site
+        run: |
+          mkdir -p public/badges
+          python - <<'PY'
+          import json, pathlib
+          coverage = float("${{ steps.measure.outputs.coverage }}")
+          colour = "brightgreen" if coverage >= 95 else "yellow" if coverage >= 85 else "red"
+          pathlib.Path("public/badges").mkdir(parents=True, exist_ok=True)
+          pathlib.Path("public/badges/coverage.json").write_text(
+              json.dumps({"schemaVersion": 1, "label": "coverage",
+                          "message": f"{coverage:.1f}%", "color": colour}) + "\n")
+          PY
+
+      - name: Publish
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          cd public
+          touch .nojekyll
+          git init -q -b gh-pages
+          git add -A
+          git commit -q -m "chore: publish site and badges for ${GITHUB_SHA::12}"
+          git push -q --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" gh-pages

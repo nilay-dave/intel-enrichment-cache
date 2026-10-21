@@ -1,0 +1,27 @@
+repos:
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff
+        entry: python -m ruff check --force-exclude
+        language: system
+        types_or: [python]
+
+      - id: no-dashes
+        name: no em or en dashes
+        entry: python tools/check_dashes.py
+        language: system
+        types_or: [python, markdown, yaml, toml]
+
+      - id: markdown-tables
+        name: markdown tables are well formed
+        entry: python tools/check_tables.py
+        language: system
+        types_or: [markdown]
+
+      - id: published-numbers
+        name: published numbers match the measured ones
+        entry: python tools/check_numbers.py
+        language: system
+        pass_filenames: false
+        files: ^(README\.md|docs/.*\.md|docs/metrics\.json)$

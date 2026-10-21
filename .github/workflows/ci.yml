@@ -1,0 +1,122 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: verify (python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.11', '3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # provenance_check.py reads the commit history, which a shallow
+          # checkout does not have.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install
+        run: python -m pip install -e ".[dev]"
+
+      - name: Lint
+        run: python -m ruff check src tests tools benchmark scripts
+
+      - name: Test
+        # No API key and no outbound request anywhere in this suite. A library
+        # whose tests need credentials is one nobody can contribute to, and one
+        # whose tests hit a live provider spends somebody's quota on every run.
+        run: python -m pytest --cov=iec --cov-report=term-missing --cov-report=xml
+
+      - name: No network reached the provider endpoints
+        # The suite mocks httpx, so a request escaping to a real host means a
+        # test bypassed the mock, which would make CI depend on somebody's free
+        # tier being up. Asserted rather than assumed.
+        run: |
+          python - <<'PY'
+          import pathlib, re, sys
+          offenders = []
+          for path in pathlib.Path("tests").rglob("*.py"):
+              text = path.read_text(encoding="utf-8")
+              uses_real_host = re.search(r"https://(www\.virustotal|api\.abuseipdb)", text)
+              if uses_real_host and "respx" not in text:
+                  offenders.append(str(path))
+          if offenders:
+              print("these name a real provider host without mocking:", offenders, file=sys.stderr)
+              raise SystemExit(1)
+          print("every test naming a provider host also mocks the transport")
+          PY
+
+      - name: House style
+        run: |
+          python tools/check_dashes.py
+          python tools/check_tables.py
+
+      - name: Declared dependencies are all used
+        run: python tools/check_dependencies.py
+
+      - name: Published numbers match the measured ones
+        run: python tools/check_numbers.py
+
+      - name: Provenance
+        if: matrix.python == '3.13'
+        run: python scripts/provenance_check.py
+
+  determinism:
+    name: the deterministic experiments are deterministic
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install
+        run: python -m pip install -e ".[dev]"
+
+      - name: Run the quota experiment twice and compare
+        # Experiments A and B involve no latency model and no wall clock, so
+        # two runs on the same stream must agree exactly. They did not always:
+        # the benchmark used to reuse its workspace, so a run inherited the
+        # previous one's cache and reported a request count it had not earned.
+        # This is the check that would have caught it.
+        run: |
+          python benchmark/run_benchmark.py --sizes 4000 --ttl-size 4000 --hedge-size 400 \
+            --workspace /tmp/first --out /tmp/first.json
+          python benchmark/run_benchmark.py --sizes 4000 --ttl-size 4000 --hedge-size 400 \
+            --workspace /tmp/second --out /tmp/second.json
+          python - <<'PY'
+          import json, pathlib, sys
+          first = json.loads(pathlib.Path("/tmp/first.json").read_text())
+          second = json.loads(pathlib.Path("/tmp/second.json").read_text())
+          stable = ["cache_hit_rate", "provider_requests", "from_cache", "coalesced",
+                    "requests_per_1000_lookups", "lookups"]
+          failures = []
+          for section in ("quota_efficiency", "ttl_policy"):
+              for left, right in zip(first[section], second[section], strict=True):
+                  for key in stable:
+                      if left[key] != right[key]:
+                          failures.append(f"{section}.{key}: {left[key]} != {right[key]}")
+          if failures:
+              print("the deterministic experiments disagreed between runs:", file=sys.stderr)
+              for line in failures:
+                  print(" ", line, file=sys.stderr)
+              raise SystemExit(1)
+          print(f"both runs agree on every one of {len(stable)} stable fields")
+          PY

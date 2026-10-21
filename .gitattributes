@@ -1,0 +1,4 @@
+# The language bar should describe what this project is. It is a Python
+# library, and the only other code here is its workflows.
+*.md linguist-documentation
+docs/** linguist-documentation

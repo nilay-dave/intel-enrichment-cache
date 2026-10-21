@@ -34,6 +34,8 @@ MODULE_NAME = {
 INDIRECT = {
     "ruff": "a linter invoked as a command, not a library",
     "respx": "a pytest plugin for mocking httpx, imported by tests rather than by the library",
+    "pytest-asyncio": "a pytest plugin, enabled by asyncio_mode in pyproject rather than imported",
+    "numpy": "used by the benchmark's stream and latency models, not by the library itself",
 }
 
 
