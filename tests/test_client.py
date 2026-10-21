@@ -62,10 +62,11 @@ class Clock:
 @pytest.fixture
 def plumbing(tmp_path):
     clock = Clock()
-    cache = SqliteCache(tmp_path / "cache.sqlite", clock=lambda: 1_700_000_000.0 + clock.now)
-    quota = DailyQuota(tmp_path / "quota.sqlite", clock=lambda: 1_700_000_000.0 + clock.now)
-    yield clock, cache, quota
-    cache.close()
+    # Closed by the context manager, which closes every connection the cache
+    # opened on any thread rather than only the one belonging to this one.
+    with SqliteCache(tmp_path / "cache.sqlite", clock=lambda: 1_700_000_000.0 + clock.now) as cache:
+        quota = DailyQuota(tmp_path / "quota.sqlite", clock=lambda: 1_700_000_000.0 + clock.now)
+        yield clock, cache, quota
 
 
 def build(plumbing, *, providers=("vt",), hedge=None, ttl=None, vt_rate=None, vt_daily=None):
@@ -399,5 +400,5 @@ class TestStats:
 
 
 def test_a_client_with_no_providers_is_refused(tmp_path):
-    with pytest.raises(ValueError, match="at least one provider"):
-        EnrichmentClient([], cache=SqliteCache(tmp_path / "c.sqlite"), quota=tmp_path / "q.sqlite")
+    with SqliteCache(tmp_path / "c.sqlite") as cache, pytest.raises(ValueError, match="at least one provider"):
+        EnrichmentClient([], cache=cache, quota=tmp_path / "q.sqlite")

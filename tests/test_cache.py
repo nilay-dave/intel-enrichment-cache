@@ -1,3 +1,8 @@
+# sqlite3.Connection as a context manager commits or rolls back a
+# transaction. It does not close the connection, which is a footgun worth
+# naming because three tests in this repository used it that way and leaked a
+# handle each. contextlib.closing is what closes. The library itself always
+# used closing; only these tests were wrong.
 import pytest
 
 from iec.cache import DEFAULT_TTL_SECONDS, SqliteCache, TTLPolicy
@@ -207,9 +212,10 @@ class TestStorage:
         volume is common enough that the default journal would make the cache
         the contention point it was added to remove."""
         import sqlite3
+        from contextlib import closing
 
         _, store = cache
-        with sqlite3.connect(store._path) as connection:
+        with closing(sqlite3.connect(store._path)) as connection:
             assert connection.execute("PRAGMA journal_mode").fetchone()[0].lower() == "wal"
 
     async def test_entries_survive_reopening_the_file(self, tmp_path):
@@ -230,3 +236,46 @@ class TestStorage:
         await store.put(enrichment(), 3600.0)
         results = await asyncio.gather(*(store.get("ip_address:8.8.8.8") for _ in range(12)))
         assert all(result is not None for result in results)
+
+
+class TestTeardown:
+    async def test_close_releases_connections_opened_on_worker_threads(self, tmp_path):
+        """The thread local alone was not enough. close() ran on the calling
+        thread and released that thread's connection, leaving one open per
+        worker thread in the pool. It showed up as a ResourceWarning about an
+        unclosed database, which is the kind of warning that is easy to
+        dismiss and was a real file handle leak.
+        """
+        import asyncio
+
+        store = SqliteCache(tmp_path / "cache.sqlite")
+        await store.put(enrichment(), 3600.0)
+        await asyncio.gather(*(store.get("ip_address:8.8.8.8") for _ in range(16)))
+        assert len(store._connections) > 1, "the thread pool should have opened several"
+        store.close()
+        assert store._connections == []
+
+    async def test_a_closed_cache_raises_rather_than_reopening_silently(self, tmp_path):
+        """Reopening on demand would make close() a suggestion.
+
+        The first version of close() left the thread local empty, so the next
+        lookup opened a fresh connection and the caller who thought they had
+        released the file found it taken again, with the leak back and nothing
+        to show it. Failing where the mistake is made is the only useful
+        behaviour.
+        """
+        store = SqliteCache(tmp_path / "cache.sqlite")
+        await store.put(enrichment(), 3600.0)
+        store.close()
+        with pytest.raises(RuntimeError, match="closed"):
+            await store.get("ip_address:8.8.8.8")
+
+    async def test_closing_twice_is_harmless(self, tmp_path):
+        store = SqliteCache(tmp_path / "cache.sqlite")
+        store.close()
+        store.close()
+
+    async def test_it_works_as_a_context_manager(self, tmp_path):
+        with SqliteCache(tmp_path / "cache.sqlite") as store:
+            assert await store.put(enrichment(), 3600.0) is True
+        assert store._connections == []

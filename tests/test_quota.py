@@ -1,4 +1,10 @@
+# sqlite3.Connection as a context manager commits or rolls back a
+# transaction. It does not close the connection, which is a footgun worth
+# naming because three tests in this repository used it that way and leaked a
+# handle each. contextlib.closing is what closes. The library itself always
+# used closing; only these tests were wrong.
 import sqlite3
+from contextlib import closing
 
 import pytest
 
@@ -126,7 +132,7 @@ def test_old_rows_are_pruned_rather_than_accumulating(quota):
         store.charge("vt", 50, DAY)
     clock.now += DAY + 1
     store.spent("vt", DAY)
-    with sqlite3.connect(store._path) as connection:
+    with closing(sqlite3.connect(store._path)) as connection:
         remaining = connection.execute("SELECT COUNT(*) FROM spend").fetchone()[0]
     assert remaining == 0
 
@@ -138,6 +144,6 @@ def test_the_database_is_created_with_its_parent_directory(tmp_path):
 
 def test_write_ahead_logging_is_on(quota):
     _, store = quota
-    with sqlite3.connect(store._path) as connection:
+    with closing(sqlite3.connect(store._path)) as connection:
         mode = connection.execute("PRAGMA journal_mode").fetchone()[0]
     assert mode.lower() == "wal"

@@ -209,12 +209,19 @@ class TestRequestAccounting:
 
         The fast path returns without ever parking on a timer, so it is done
         before the first wait on it is evaluated and cannot hedge whatever the
-        machine is doing. An earlier version slept for a millisecond against a
-        twenty millisecond delay, which passed alone and failed inside the full
-        suite, where the margin disappears under load. A test of accounting
-        should not be a test of the scheduler.
+        machine is doing.
+
+        The slow path waits on the hedge having happened rather than on a
+        duration. Two earlier versions of this test raced. The first slept a
+        millisecond against a twenty millisecond delay and failed under load.
+        The second released the blocked call as soon as the fast ones finished,
+        which is sooner than the hedge delay, so the hedge it was asserting
+        never fired: the dependency was the wrong way round and it passed three
+        times before coverage instrumentation shifted the timing enough to show
+        it. A test of accounting should not be a test of the scheduler, and
+        waiting on a condition is the only way to mean that.
         """
-        agent = hedger(HedgePolicy(enabled=True, after_seconds=0.02))
+        agent = hedger(HedgePolicy(enabled=True, after_seconds=0.01))
         blocker = asyncio.Event()
 
         async def immediate():
@@ -226,6 +233,14 @@ class TestRequestAccounting:
 
         slow_call = asyncio.ensure_future(agent.run(blocked))
         quick = await asyncio.gather(*(agent.run(immediate) for _ in range(20)))
+
+        # Wait for the hedge itself, not for a length of time.
+        for _ in range(2000):
+            if agent.stats.sent:
+                break
+            await asyncio.sleep(0.001)
+        assert agent.stats.sent == 1, "the blocked call should have hedged by now"
+
         blocker.set()
         slow = await slow_call
 

@@ -39,6 +39,13 @@ testpaths = ["tests"]
 addopts = "-q"
 pythonpath = ["."]
 asyncio_mode = "auto"
+# A leaked SQLite handle fails the suite rather than printing a warning nobody
+# reads. Two real bugs were found by chasing these: close() released only the
+# calling thread's connection, and three tests used a Connection as a context
+# manager, which commits a transaction and does not close anything.
+filterwarnings = [
+  "error::ResourceWarning",
+]
 
 [tool.ruff]
 line-length = 120

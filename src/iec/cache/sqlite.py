@@ -55,6 +55,16 @@ class SqliteCache:
         self._path = Path(path)
         self._clock = clock
         self._local = threading.local()
+        # Every connection ever opened, so close() can close all of them. The
+        # thread local alone was not enough: close() ran on the calling thread
+        # and released that thread's connection, leaving one open per worker
+        # thread in the pool. In a long running worker those are reused and the
+        # leak is invisible; in a process that builds and discards caches it is
+        # a file handle each time, which is how it showed up, as a
+        # ResourceWarning in the test suite.
+        self._connections: list[sqlite3.Connection] = []
+        self._connections_lock = threading.Lock()
+        self._closed = False
         self._stats = CacheStats()
         if self._path.parent != Path():
             self._path.parent.mkdir(parents=True, exist_ok=True)
@@ -63,14 +73,28 @@ class SqliteCache:
         connection.commit()
 
     def _connection(self) -> sqlite3.Connection:
+        if self._closed:
+            # Reopening on demand would make close() a suggestion: a caller who
+            # released the file would find the next lookup had taken it again,
+            # and the leak close() exists to fix would be back with no sign of
+            # it. Better to fail where the mistake is.
+            raise RuntimeError("this cache is closed")
         existing = getattr(self._local, "connection", None)
         if existing is not None:
             return existing
-        connection = sqlite3.connect(self._path, timeout=5.0)
+        # check_same_thread is off so that close() can close a connection from
+        # a thread other than the one that opened it. The safety that flag
+        # normally provides is kept by construction instead: a connection is
+        # only ever handed to the thread it was created for, because it lives
+        # in thread local storage, so no two threads use one concurrently. The
+        # flag permits the teardown, not shared use.
+        connection = sqlite3.connect(self._path, timeout=5.0, check_same_thread=False)
         connection.execute("PRAGMA journal_mode=WAL")
         connection.execute("PRAGMA synchronous=NORMAL")
         connection.row_factory = sqlite3.Row
         self._local.connection = connection
+        with self._connections_lock:
+            self._connections.append(connection)
         return connection
 
     @property
@@ -150,10 +174,25 @@ class SqliteCache:
         return await asyncio.to_thread(self._count)
 
     def close(self) -> None:
-        connection = getattr(self._local, "connection", None)
-        if connection is not None:
-            connection.close()
-            self._local.connection = None
+        """Close every connection this cache opened, on any thread."""
+        self._closed = True
+        with self._connections_lock:
+            connections, self._connections = self._connections, []
+        for connection in connections:
+            try:
+                connection.close()
+            except sqlite3.Error:
+                # A connection already closed, or whose thread died mid
+                # statement. Nothing useful to do, and raising here would turn
+                # a tidy up into a failure.
+                pass
+        self._local.connection = None
+
+    def __enter__(self) -> SqliteCache:
+        return self
+
+    def __exit__(self, *exception: object) -> None:
+        self.close()
 
 
 def _from_row(row: sqlite3.Row) -> Enrichment:
