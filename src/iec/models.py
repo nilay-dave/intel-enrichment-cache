@@ -20,7 +20,14 @@ HASH_PATTERNS = {
     64: "sha256",
 }
 IPV4 = re.compile(r"^(\d{1,3}\.){3}\d{1,3}$")
-DOMAIN = re.compile(r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))+$")
+# The final label may not be entirely numeric. No top level domain is, and
+# without that rule "1.2.3" and "192.168.1" are syntactically valid hostnames,
+# so a truncated or mistyped address classifies as a domain and spends a request
+# on an endpoint that can never resolve it. The error a caller gets back is then
+# "no data held" rather than "that is not an indicator".
+DOMAIN = re.compile(
+    r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*\.(?!-)(?!\d+$)[A-Za-z0-9-]{1,63}(?<!-)$"
+)
 
 
 class IndicatorClass(StrEnum):

@@ -195,8 +195,20 @@ class TestCache:
 class TestCoalescing:
     @respx.mock
     async def test_a_burst_of_one_indicator_costs_one_request(self, plumbing):
-        """Where the quota saving on a bursty stream actually comes from."""
-        route = respx.get(VT_IP.format(ip="8.8.8.8")).mock(return_value=httpx.Response(200, json=vt_body()))
+        """Where the quota saving on a bursty stream actually comes from.
+
+        The mock is deliberately not instant. Coalescing needs a request in
+        flight to coalesce onto, so with an immediate response the first caller
+        can land before the others arrive and nothing coalesces, which is
+        correct behaviour and makes the assertion test a condition the test
+        never created. An earlier version of this passed by luck.
+        """
+
+        async def slow_responder(request):
+            await asyncio.sleep(0.02)
+            return httpx.Response(200, json=vt_body())
+
+        route = respx.get(VT_IP.format(ip="8.8.8.8")).mock(side_effect=slow_responder)
         client, _, http = build(plumbing)
         results = await client.enrich_many(["8.8.8.8"] * 25, concurrency=25)
         assert route.call_count == 1
@@ -208,7 +220,12 @@ class TestCoalescing:
     async def test_a_coalesced_answer_is_not_counted_as_a_cache_hit(self, plumbing):
         """Counting it as one would overstate what the cache achieves, and on a
         bursty stream the two are not the same size."""
-        respx.get(VT_IP.format(ip="8.8.8.8")).mock(return_value=httpx.Response(200, json=vt_body()))
+
+        async def slow_responder(request):
+            await asyncio.sleep(0.02)
+            return httpx.Response(200, json=vt_body())
+
+        respx.get(VT_IP.format(ip="8.8.8.8")).mock(side_effect=slow_responder)
         client, _, http = build(plumbing)
         await client.enrich_many(["8.8.8.8"] * 10, concurrency=10)
         assert client.stats.coalesced == 9
