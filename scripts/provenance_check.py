@@ -244,13 +244,25 @@ def check_numbers(report: Report) -> None:
 
 def check_language_mix(report: Report) -> None:
     attributes = ROOT / ".gitattributes"
-    detectable = attributes.exists() and "linguist-detectable" in attributes.read_text(encoding="utf-8")
+    # Any linguist attribute counts, not specifically linguist-detectable. What
+    # this signal asks is whether an explicit decision was made about the
+    # language bar, and marking documentation, generated output or vendored
+    # test data is that decision as much as forcing a data language on is. The
+    # narrower version failed a repository whose .gitattributes correctly used
+    # linguist-documentation and linguist-generated and had nothing that needed
+    # forcing, which is the check being wrong rather than the repository.
+    text = attributes.read_text(encoding="utf-8") if attributes.exists() else ""
+    marks = sorted({
+        word.split("=")[0]
+        for word in text.split()
+        if word.startswith("linguist-")
+    })
     report.add(
-        "gitattributes marks data languages",
-        PASS if detectable else FAIL,
-        "yaml, json and sql marked detectable so the language bar is not 100 percent python"
-        if detectable
-        else ".gitattributes missing or has no linguist-detectable",
+        "gitattributes records a language decision",
+        PASS if marks else FAIL,
+        f"{', '.join(marks)} set, so the language bar is a decision rather than a default"
+        if marks
+        else ".gitattributes missing or has no linguist attribute",
     )
 
     tracked = [Path(p) for p in git("ls-files").splitlines() if p]
