@@ -183,7 +183,30 @@ class TestVirtualClockItself:
             await asyncio.Event().wait()
 
         with pytest.raises(AssertionError, match="blocked on something other than this clock"):
-            await clock.run(blocked())
+            await clock.run(blocked(), real_wait_attempts=5)
+
+    async def test_real_work_is_given_time_to_resolve_rather_than_reported(self):
+        """A coroutine inside asyncio.to_thread, which is how the cache reaches
+        SQLite, is parked on a future another thread resolves, not on virtual
+        time. An earlier version raised immediately there, which made this
+        clock unusable for anything touching the cache."""
+
+        def blocking() -> str:
+            import time as real_time
+
+            real_time.sleep(0.01)
+            return "from a thread"
+
+        async def mixed():
+            await clock.sleep(5)
+            value = await asyncio.to_thread(blocking)
+            await clock.sleep(5)
+            return value
+
+        clock = VirtualClock()
+        [result] = await clock.run(mixed())
+        assert result == "from a thread"
+        assert clock.now == 10.0
 
     async def test_an_endless_wait_fails_rather_than_hanging(self):
         clock = VirtualClock()
@@ -194,3 +217,22 @@ class TestVirtualClockItself:
 
         with pytest.raises(AssertionError, match="without finishing"):
             await clock.run(forever(), timeout_steps=50)
+
+    async def test_progress_in_tasks_the_clock_does_not_own_is_reported_by_activity(self):
+        """A driver that spawns its own tasks looks stuck to the clock whenever
+        those tasks complete without sleeping, which is what a run of cache
+        hits looks like. The activity hook is how the caller says otherwise."""
+        clock = VirtualClock()
+        completed = 0
+
+        async def quick():
+            nonlocal completed
+            await asyncio.to_thread(lambda: None)
+            completed += 1
+
+        async def driver():
+            spawned = [asyncio.ensure_future(quick()) for _ in range(40)]
+            await asyncio.gather(*spawned)
+
+        [_] = await clock.run(driver(), real_wait_attempts=3, activity=lambda: completed)
+        assert completed == 40

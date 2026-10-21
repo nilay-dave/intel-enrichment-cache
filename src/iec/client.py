@@ -265,29 +265,32 @@ class EnrichmentClient:
 
             await self._buckets[provider.name].acquire()
             hedger = self._hedgers[provider.name]
-            sent_before = hedger.stats.sent
 
             try:
-                verdict, by_hedge = await hedger.run(lambda provider=provider: provider.lookup(indicator))
+                attempt = await hedger.run(lambda provider=provider: provider.lookup(indicator))
             except RateLimited as exc:
                 # The local limiter was wrong. Counted separately because the
                 # fix is the preset, not a retry.
                 self.stats.provider_rate_limited += 1
+                self.stats.provider_requests += 1
                 errors.append(str(exc))
                 continue
             except ProviderError as exc:
                 self.stats.provider_errors += 1
+                self.stats.provider_requests += 1
                 errors.append(str(exc))
                 continue
-            finally:
-                spent = 1 + (hedger.stats.sent - sent_before)
-                self.stats.provider_requests += spent
-                self.stats.hedges_sent += hedger.stats.sent - sent_before
 
-            if by_hedge:
+            # Taken from the attempt rather than from a difference of the
+            # shared counters, which under concurrency attributes other
+            # lookups' hedges to this one.
+            self.stats.provider_requests += attempt.requests
+            self.stats.hedges_sent += attempt.requests - 1
+
+            if attempt.won_by_hedge:
                 hedged_any = True
                 self.stats.hedges_won += 1
-            verdicts.append(verdict)
+            verdicts.append(attempt.value)
 
         if not verdicts:
             quota_only = asked > 0 and self.stats.provider_errors == 0 and self.stats.provider_rate_limited == 0

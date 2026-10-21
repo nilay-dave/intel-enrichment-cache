@@ -46,9 +46,9 @@ class TestPolicyValidation:
 class TestDisabled:
     async def test_no_second_request_is_ever_sent(self):
         work = Attempts(0.05)
-        result, hedged = await hedger(HedgePolicy(enabled=False)).run(work)
-        assert result == "attempt-0"
-        assert hedged is False
+        attempt = await hedger(HedgePolicy(enabled=False)).run(work)
+        assert attempt.value == "attempt-0"
+        assert attempt.won_by_hedge is False
         assert work.calls == 1
 
     async def test_nothing_is_counted_as_eligible(self):
@@ -62,18 +62,18 @@ class TestEnabled:
     async def test_a_fast_first_response_is_not_hedged(self):
         work = Attempts(0.001)
         agent = hedger(HedgePolicy(enabled=True, after_seconds=0.05))
-        result, hedged = await agent.run(work)
-        assert result == "attempt-0"
-        assert hedged is False
+        attempt = await agent.run(work)
+        assert attempt.value == "attempt-0"
+        assert attempt.won_by_hedge is False
         assert work.calls == 1
         assert agent.stats.eligible == 0
 
     async def test_a_slow_first_response_is_hedged(self):
         work = Attempts(0.2, 0.01)
         agent = hedger(HedgePolicy(enabled=True, after_seconds=0.02))
-        result, hedged = await agent.run(work)
-        assert result == "attempt-1"
-        assert hedged is True
+        attempt = await agent.run(work)
+        assert attempt.value == "attempt-1"
+        assert attempt.won_by_hedge is True
         assert work.calls == 2
         assert agent.stats.sent == 1
         assert agent.stats.won_by_hedge == 1
@@ -83,9 +83,9 @@ class TestEnabled:
         appear next to the latency improvement."""
         work = Attempts(0.04, 0.5)
         agent = hedger(HedgePolicy(enabled=True, after_seconds=0.01))
-        result, hedged = await agent.run(work)
-        assert result == "attempt-0"
-        assert hedged is False
+        attempt = await agent.run(work)
+        assert attempt.value == "attempt-0"
+        assert attempt.won_by_hedge is False
         assert agent.stats.sent == 1
         assert agent.stats.won_by_hedge == 0
         assert agent.stats.extra_requests == 1
@@ -107,9 +107,9 @@ class TestRefusals:
         agent = hedger(
             HedgePolicy(enabled=True, after_seconds=0.01, min_remaining_fraction=0.25), remaining=0.05
         )
-        result, hedged = await agent.run(work)
-        assert result == "attempt-0"
-        assert hedged is False
+        attempt = await agent.run(work)
+        assert attempt.value == "attempt-0"
+        assert attempt.won_by_hedge is False
         assert work.calls == 1
         assert agent.stats.eligible == 1
         assert agent.stats.refused_low_quota == 1
@@ -120,8 +120,8 @@ class TestRefusals:
         different alert."""
         work = Attempts(0.05)
         agent = hedger(HedgePolicy(enabled=True, after_seconds=0.01), token=False)
-        result, hedged = await agent.run(work)
-        assert hedged is False
+        attempt = await agent.run(work)
+        assert attempt.won_by_hedge is False
         assert work.calls == 1
         assert agent.stats.refused_no_token == 1
 
@@ -160,9 +160,9 @@ class TestFailures:
             await asyncio.sleep(0.01)
             return "hedge won"
 
-        result, hedged = await hedger(HedgePolicy(enabled=True, after_seconds=0.01)).run(first_fails)
-        assert result == "hedge won"
-        assert hedged is True
+        attempt = await hedger(HedgePolicy(enabled=True, after_seconds=0.01)).run(first_fails)
+        assert attempt.value == "hedge won"
+        assert attempt.won_by_hedge is True
 
     async def test_the_loser_is_cancelled_rather_than_left_running(self):
         running = []
@@ -181,3 +181,54 @@ class TestFailures:
         await agent.run(tracked)
         await asyncio.sleep(0.02)
         assert "cancelled" in running
+
+
+class TestRequestAccounting:
+    """The count a caller charges its quota against.
+
+    Returned per call rather than inferred from the shared counters. With sixty
+    four lookups in flight against one hedger, a difference of stats.sent picks
+    up hedges other calls sent: a benchmark run reported 583 provider requests
+    for 217 lookups, which is more than one hedge each and so impossible.
+    """
+
+    async def test_an_unhedged_call_reports_one_request(self):
+        attempt = await hedger(HedgePolicy(enabled=False)).run(Attempts(0.001))
+        assert attempt.requests == 1
+
+    async def test_a_hedged_call_reports_two(self):
+        attempt = await hedger(HedgePolicy(enabled=True, after_seconds=0.01)).run(Attempts(0.2, 0.01))
+        assert attempt.requests == 2
+
+    async def test_a_refused_hedge_reports_one(self):
+        attempt = await hedger(HedgePolicy(enabled=True, after_seconds=0.01), token=False).run(Attempts(0.05))
+        assert attempt.requests == 1
+
+    async def test_concurrent_calls_do_not_borrow_each_others_counts(self):
+        """One hedger, many lookups. Each call's count is its own.
+
+        The fast path returns without ever parking on a timer, so it is done
+        before the first wait on it is evaluated and cannot hedge whatever the
+        machine is doing. An earlier version slept for a millisecond against a
+        twenty millisecond delay, which passed alone and failed inside the full
+        suite, where the margin disappears under load. A test of accounting
+        should not be a test of the scheduler.
+        """
+        agent = hedger(HedgePolicy(enabled=True, after_seconds=0.02))
+        blocker = asyncio.Event()
+
+        async def immediate():
+            return "fast"
+
+        async def blocked():
+            await blocker.wait()
+            return "slow"
+
+        slow_call = asyncio.ensure_future(agent.run(blocked))
+        quick = await asyncio.gather(*(agent.run(immediate) for _ in range(20)))
+        blocker.set()
+        slow = await slow_call
+
+        assert slow.requests == 2, "the blocked call hedged, so it spent two"
+        assert all(attempt.requests == 1 for attempt in quick)
+        assert sum(attempt.requests for attempt in [*quick, slow]) == 22
