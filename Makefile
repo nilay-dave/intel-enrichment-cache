@@ -23,6 +23,7 @@ verify: lint test
 	$(PYTHON) tools/check_tables.py
 	$(PYTHON) tools/check_dependencies.py
 	$(PYTHON) tools/check_numbers.py
+	$(PYTHON) tools/generate_measurements_doc.py --check
 	$(PYTHON) scripts/provenance_check.py
 
 # Regenerates docs/metrics.json. Experiments A and B are deterministic;
@@ -36,6 +37,7 @@ stream:
 	$(PYTHON) benchmark/stream.py --length 10000 --universe 2000
 
 docs:
+	$(PYTHON) tools/generate_measurements_doc.py
 	$(PYTHON) -m mkdocs build --strict --site-dir public
 
 clean:

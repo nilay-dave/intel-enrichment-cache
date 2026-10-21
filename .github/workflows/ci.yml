@@ -75,6 +75,9 @@ jobs:
       - name: Published numbers match the measured ones
         run: python tools/check_numbers.py
 
+      - name: The results page matches the metrics
+        run: python tools/generate_measurements_doc.py --check
+
       - name: Provenance
         if: matrix.python == '3.13'
         run: python scripts/provenance_check.py

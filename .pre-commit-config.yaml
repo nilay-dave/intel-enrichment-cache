@@ -25,3 +25,10 @@ repos:
         language: system
         pass_filenames: false
         files: ^(README\.md|docs/.*\.md|docs/metrics\.json)$
+
+      - id: measurements-doc
+        name: docs/measurements.md matches the metrics
+        entry: python tools/generate_measurements_doc.py --check
+        language: system
+        pass_filenames: false
+        files: ^docs/metrics\.json$
