@@ -143,3 +143,16 @@ async def test_the_coalesce_rate_counts_against_total_calls():
 
 def test_the_coalesce_rate_is_zero_before_anything_runs():
     assert SingleFlight().stats.coalesce_rate == 0.0
+
+
+async def test_the_leader_is_told_it_did_not_coalesce():
+    """Comparing the shared counter before and after looks equivalent and is
+    not: by the time the leader's own await returns, every waiter behind it has
+    incremented that counter, so the leader reads its own request as coalesced.
+    On a burst of 25 that reported 25 coalesced calls out of 25."""
+    flight = SingleFlight()
+    work = Counter(delay=0.02)
+    flags = await asyncio.gather(*(flight.run_tracked("k", work) for _ in range(25)))
+    coalesced = [was_coalesced for _, was_coalesced in flags]
+    assert coalesced.count(False) == 1
+    assert coalesced.count(True) == 24

@@ -58,12 +58,26 @@ class SingleFlight:
 
     async def run(self, key: str, factory: Callable[[], Awaitable[T]]) -> T:
         """Run ``factory`` for ``key``, or await the call already running."""
+        result, _ = await self.run_tracked(key, factory)
+        return result
+
+    async def run_tracked(self, key: str, factory: Callable[[], Awaitable[T]]) -> tuple[T, bool]:
+        """As ``run``, and says whether this call coalesced onto another.
+
+        The flag is returned rather than left for the caller to work out from
+        the counters. Comparing the shared coalesced count before and after
+        looks equivalent and is not: by the time the first caller's own await
+        returns, every waiter behind it has already incremented that counter,
+        so the leader reads its own request as coalesced. On a burst of 25 that
+        reported 25 coalesced calls out of 25, which is one more than exists
+        and makes the headline saving look better than it is.
+        """
         existing = self._inflight.get(key)
         if existing is not None:
             self.stats.coalesced += 1
             # Shielded, so a waiter that gives up does not cancel the request
             # the other waiters are still relying on.
-            return await asyncio.shield(existing)
+            return await asyncio.shield(existing), True
 
         task = asyncio.ensure_future(factory())
         self._inflight[key] = task
@@ -75,7 +89,7 @@ class SingleFlight:
         # and the next caller would start a second request for the same thing.
         task.add_done_callback(lambda finished, key=key: self._retire(key, finished))
 
-        return await asyncio.shield(task)
+        return await asyncio.shield(task), False
 
     def _retire(self, key: str, task: asyncio.Task) -> None:
         if self._inflight.get(key) is task:
