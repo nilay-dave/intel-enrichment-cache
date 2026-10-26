@@ -56,11 +56,16 @@ jobs:
 
       - name: Publish
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           cd public
           touch .nojekyll
           git init -q -b gh-pages
+          # Identity must be set after git init, inside the new repository.
+          # Setting it before writes to the checkout's config, and the fresh
+          # repository created here inherits nothing from it. A runner has no
+          # global identity, so the commit below failed with "Author identity
+          # unknown" and the site has never published.
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -q -m "chore: publish site and badges for ${GITHUB_SHA::12}"
           git push -q --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" gh-pages

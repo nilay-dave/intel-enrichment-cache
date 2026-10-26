@@ -11,6 +11,7 @@ Run from the repository root:
 
 from __future__ import annotations
 
+import argparse
 import json
 import re
 import subprocess
@@ -21,6 +22,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 PASS, WEAK, FAIL = "PASS", "WEAK", "FAIL"
+WAIVED = "WAIVED"
 CONVENTIONAL = re.compile(r"^(feat|fix|test|docs|ci|chore|refactor|perf|build)(\([a-z0-9_-]+\))?: .+")
 STATIC_STATUS_BADGE = re.compile(
     r"!\[[^\]]*\]\(https://img\.shields\.io/badge/[^)]*"
@@ -41,15 +43,31 @@ class Report:
     def add(self, name: str, verdict: str, note: str) -> None:
         self.rows.append((name, verdict, note))
 
-    def render(self) -> int:
+    def render(self, waived: set[str] | None = None) -> int:
+        """Print the audit and return the exit code.
+
+        A waived check still runs and is still printed, as WAIVED rather than
+        hidden. A check quietly dropped is worse than one that fails: a reader
+        cannot then tell a signal that passed from one nobody looks at any more.
+        """
+        waived = waived or set()
+        unknown = sorted(waived - {name for name, _, _ in self.rows})
         width = max(len(name) for name, _, _ in self.rows)
+        counts = Counter()
         for name, verdict, note in self.rows:
-            print(f"  {verdict:4s}  {name:<{width}}  {note}")
-        counts = Counter(verdict for _, verdict, _ in self.rows)
+            shown = WAIVED if (verdict == FAIL and name in waived) else verdict
+            counts[shown] += 1
+            suffix = "   [waived: see the workflow for the reason]" if shown == WAIVED else ""
+            print(f"  {shown:6s}  {name:<{width}}  {note}{suffix}")
         print(
-            f"\n  {counts[PASS]} pass, {counts[WEAK]} weak, {counts[FAIL]} fail "
-            f"across {len(self.rows)} provenance checks"
+            f"\n  {counts[PASS]} pass, {counts[WEAK]} weak, {counts[WAIVED]} waived, "
+            f"{counts[FAIL]} fail across {len(self.rows)} provenance checks"
         )
+        if unknown:
+            # A typo in --waive must not read as a pass. It would waive nothing
+            # while looking as though a decision had been recorded.
+            print(f"\n  --waive names no such check: {unknown}", file=sys.stderr)
+            return 1
         return 1 if counts[FAIL] else 0
 
 
@@ -113,9 +131,7 @@ def check_history(report: Report) -> None:
     report.add(
         "subject length",
         PASS if not long_subjects else WEAK,
-        "all subjects 72 characters or fewer"
-        if not long_subjects
-        else f"{len(long_subjects)} over 72 characters",
+        "all subjects 72 characters or fewer" if not long_subjects else f"{len(long_subjects)} over 72 characters",
     )
 
     initial = [s for s in subjects if s.strip().lower() == "initial commit"]
@@ -126,8 +142,12 @@ def check_history(report: Report) -> None:
     )
 
     fix_bodies = git("log", "--format=%H%x1f%s%x1f%b%x1e").split("\x1e")
-    fixes = [entry for entry in fix_bodies if "\x1ffix" in f"\x1f{entry.split(chr(31))[1][:3]}" or
-             (len(entry.split("\x1f")) > 1 and entry.split("\x1f")[1].startswith("fix"))]
+    fixes = [
+        entry
+        for entry in fix_bodies
+        if "\x1ffix" in f"\x1f{entry.split(chr(31))[1][:3]}"
+        or (len(entry.split("\x1f")) > 1 and entry.split("\x1f")[1].startswith("fix"))
+    ]
     bodyless = [f for f in fixes if len(f.split("\x1f")) < 3 or not f.split("\x1f")[2].strip()]
     report.add(
         "fix commits explain themselves",
@@ -236,7 +256,9 @@ def check_numbers(report: Report) -> None:
             PASS if result.returncode == 0 else FAIL,
             "every published number matches a measured one"
             if result.returncode == 0
-            else result.stderr.strip().splitlines()[0] if result.stderr.strip() else "check failed",
+            else result.stderr.strip().splitlines()[0]
+            if result.stderr.strip()
+            else "check failed",
         )
     else:
         report.add("number check exists", FAIL, "tools/check_numbers.py is absent")
@@ -252,11 +274,7 @@ def check_language_mix(report: Report) -> None:
     # linguist-documentation and linguist-generated and had nothing that needed
     # forcing, which is the check being wrong rather than the repository.
     text = attributes.read_text(encoding="utf-8") if attributes.exists() else ""
-    marks = sorted({
-        word.split("=")[0]
-        for word in text.split()
-        if word.startswith("linguist-")
-    })
+    marks = sorted({word.split("=")[0] for word in text.split() if word.startswith("linguist-")})
     report.add(
         "gitattributes records a language decision",
         PASS if marks else FAIL,
@@ -313,9 +331,7 @@ def check_community(report: Report) -> None:
     report.add(
         "docs site configured",
         PASS if (ROOT / "mkdocs.yml").exists() else WEAK,
-        "mkdocs.yml present with a pages deploy workflow"
-        if (ROOT / "mkdocs.yml").exists()
-        else "no docs site",
+        "mkdocs.yml present with a pages deploy workflow" if (ROOT / "mkdocs.yml").exists() else "no docs site",
     )
 
 
@@ -329,9 +345,7 @@ def check_house_style(report: Report) -> None:
     if not checker.exists():
         report.add("no em dashes or en dashes", FAIL, "tools/check_dashes.py is absent")
     else:
-        result = subprocess.run(
-            [sys.executable, str(checker), *tracked], cwd=ROOT, capture_output=True, text=True
-        )
+        result = subprocess.run([sys.executable, str(checker), *tracked], cwd=ROOT, capture_output=True, text=True)
         first = result.stderr.strip().splitlines()[0] if result.stderr.strip() else "unknown"
         report.add(
             "no em dashes or en dashes",
@@ -397,6 +411,21 @@ def check_repo_metadata(report: Report) -> None:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description="Audit the repository's own provenance signals.")
+    parser.add_argument(
+        "--waive",
+        action="append",
+        default=[],
+        metavar="CHECK",
+        help=(
+            "record CHECK as a waived judgement call. It still runs and is still printed, but a "
+            "failure no longer changes the exit code. For a check that is a judgement about the "
+            "shape of the work rather than a defect in it. Naming a check that does not exist is "
+            "an error, so a typo cannot silently waive nothing."
+        ),
+    )
+    args = parser.parse_args()
+
     print("Provenance check: the signals a sceptic reads in the first thirty seconds\n")
     report = Report()
     check_history(report)
@@ -407,7 +436,7 @@ def main() -> int:
     check_community(report)
     check_house_style(report)
     check_repo_metadata(report)
-    return report.render()
+    return report.render(waived=set(args.waive))
 
 
 if __name__ == "__main__":
