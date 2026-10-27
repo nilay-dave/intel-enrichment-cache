@@ -94,9 +94,7 @@ class TestEnrichment:
 
     def test_an_error_is_not_cacheable(self):
         """An error is a fact about the network, not about the indicator."""
-        enrichment = Enrichment(
-            indicator=Indicator.parse("8.8.8.8"), disposition=Disposition.ERROR, error="timeout"
-        )
+        enrichment = Enrichment(indicator=Indicator.parse("8.8.8.8"), disposition=Disposition.ERROR, error="timeout")
         assert enrichment.cacheable is False
 
     def test_fetched_at_is_timezone_aware(self):

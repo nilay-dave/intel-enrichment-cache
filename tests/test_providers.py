@@ -171,9 +171,7 @@ class TestVirusTotal:
 
     @respx.mock
     async def test_a_429_raises_rate_limited_with_the_retry_hint(self):
-        respx.get(f"{VT}/ip_addresses/8.8.8.8").mock(
-            return_value=httpx.Response(429, headers={"Retry-After": "45"})
-        )
+        respx.get(f"{VT}/ip_addresses/8.8.8.8").mock(return_value=httpx.Response(429, headers={"Retry-After": "45"}))
         provider = VirusTotal("k")
         with pytest.raises(RateLimited) as caught:
             await provider.lookup(Indicator.parse("8.8.8.8"))
@@ -209,9 +207,7 @@ class TestVirusTotal:
 
     @respx.mock
     async def test_a_body_that_is_not_json_is_reported(self):
-        respx.get(f"{VT}/ip_addresses/8.8.8.8").mock(
-            return_value=httpx.Response(200, text="<html>maintenance</html>")
-        )
+        respx.get(f"{VT}/ip_addresses/8.8.8.8").mock(return_value=httpx.Response(200, text="<html>maintenance</html>"))
         provider = VirusTotal("k")
         with pytest.raises(ProviderError, match="not json"):
             await provider.lookup(Indicator.parse("8.8.8.8"))

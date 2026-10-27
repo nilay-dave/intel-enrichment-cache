@@ -82,9 +82,7 @@ def build(plumbing, *, providers=("vt",), hedge=None, ttl=None, vt_rate=None, vt
             )
         )
     if "abuse" in providers:
-        budgets.append(
-            ProviderBudget.from_preset(AbuseIPDB("test-key", client=http), preset("abuseipdb-check-free"))
-        )
+        budgets.append(ProviderBudget.from_preset(AbuseIPDB("test-key", client=http), preset("abuseipdb-check-free")))
     client = EnrichmentClient(
         budgets,
         cache=cache,
@@ -260,9 +258,7 @@ class TestQuota:
     async def test_a_provider_429_is_counted_apart_from_an_error(self, plumbing):
         """Reaching a 429 means the local limiter was wrong, which calls for
         fixing the preset rather than retrying."""
-        respx.get(VT_IP.format(ip="8.8.8.8")).mock(
-            return_value=httpx.Response(429, headers={"Retry-After": "30"})
-        )
+        respx.get(VT_IP.format(ip="8.8.8.8")).mock(return_value=httpx.Response(429, headers={"Retry-After": "30"}))
         client, _, http = build(plumbing)
         result = await client.enrich("8.8.8.8")
         assert result.disposition is Disposition.ERROR
@@ -275,9 +271,7 @@ class TestPacing:
     @respx.mock
     async def test_requests_are_paced_to_the_short_window_rate(self, plumbing):
         for index in range(6):
-            respx.get(VT_IP.format(ip=f"10.0.0.{index}")).mock(
-                return_value=httpx.Response(200, json=vt_body())
-            )
+            respx.get(VT_IP.format(ip=f"10.0.0.{index}")).mock(return_value=httpx.Response(200, json=vt_body()))
         client, clock, http = build(plumbing, vt_rate=Rate(4, 60.0))
         for index in range(6):
             await client.enrich(f"10.0.0.{index}")

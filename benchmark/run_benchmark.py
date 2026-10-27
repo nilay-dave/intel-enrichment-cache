@@ -62,6 +62,7 @@ from iec import (  # noqa: E402
 # Wide enough that the limiter is never the thing being measured.
 UNPACED = Rate(allowance=1_000_000, per_seconds=1.0)
 
+
 def fresh(room: Path) -> Path:
     """An empty directory, every time.
 
@@ -300,15 +301,11 @@ async def experiment_hedging(workspace: Path, size: int, alpha: float, universe_
             **measured,
             "extra_requests_vs_off": measured["provider_requests"] - baseline["provider_requests"],
             "extra_request_percent": round(
-                (measured["provider_requests"] - baseline["provider_requests"])
-                / baseline["provider_requests"]
-                * 100,
+                (measured["provider_requests"] - baseline["provider_requests"]) / baseline["provider_requests"] * 100,
                 2,
             ),
             "p99_change_percent": round(
-                (measured["p99_ms_simulated"] - baseline["p99_ms_simulated"])
-                / baseline["p99_ms_simulated"]
-                * 100,
+                (measured["p99_ms_simulated"] - baseline["p99_ms_simulated"]) / baseline["p99_ms_simulated"] * 100,
                 1,
             ),
         }

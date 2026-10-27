@@ -96,8 +96,7 @@ ABUSEIPDB_REPORTS_FREE = Preset(
 )
 
 PRESETS: dict[str, Preset] = {
-    preset.name: preset
-    for preset in (VIRUSTOTAL_PUBLIC, ABUSEIPDB_CHECK_FREE, ABUSEIPDB_REPORTS_FREE)
+    preset.name: preset for preset in (VIRUSTOTAL_PUBLIC, ABUSEIPDB_CHECK_FREE, ABUSEIPDB_REPORTS_FREE)
 }
 
 

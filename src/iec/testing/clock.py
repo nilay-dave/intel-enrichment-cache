@@ -142,9 +142,7 @@ class VirtualClock:
                     idle = 0 if current != marker else idle + 1
                     marker = current
                 else:
-                    raise AssertionError(
-                        "tasks are blocked on something other than this clock and did not resolve"
-                    )
+                    raise AssertionError("tasks are blocked on something other than this clock and did not resolve")
             raise AssertionError(f"clock advanced {timeout_steps} times without finishing")
         finally:
             for task in tasks:

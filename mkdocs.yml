@@ -1,7 +1,7 @@
 site_name: intel enrichment cache
 site_description: Rate limit aware threat intel client with caching, coalescing and quota aware hedging.
-repo_url: https://github.com/__GITHUB_USERNAME__/intel-enrichment-cache
-repo_name: __GITHUB_USERNAME__/intel-enrichment-cache
+repo_url: https://github.com/nilay-dave/intel-enrichment-cache
+repo_name: nilay-dave/intel-enrichment-cache
 edit_uri: edit/main/docs/
 
 theme:

@@ -42,9 +42,7 @@ def tracked_files() -> list[Path]:
     ignore list to keep in step with .gitignore.
     """
     try:
-        result = subprocess.run(
-            ["git", "ls-files", "-z"], capture_output=True, text=True, check=True
-        )
+        result = subprocess.run(["git", "ls-files", "-z"], capture_output=True, text=True, check=True)
     except (subprocess.CalledProcessError, FileNotFoundError):
         # Not a repository, or git is absent. Fall back to the working tree so
         # the check still does something rather than silently passing.

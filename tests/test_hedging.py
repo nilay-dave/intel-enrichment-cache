@@ -104,9 +104,7 @@ class TestRefusals:
         """The last of the budget belongs to alerts with no answer at all, not
         to a faster answer for one already on its way."""
         work = Attempts(0.05)
-        agent = hedger(
-            HedgePolicy(enabled=True, after_seconds=0.01, min_remaining_fraction=0.25), remaining=0.05
-        )
+        agent = hedger(HedgePolicy(enabled=True, after_seconds=0.01, min_remaining_fraction=0.25), remaining=0.05)
         attempt = await agent.run(work)
         assert attempt.value == "attempt-0"
         assert attempt.won_by_hedge is False

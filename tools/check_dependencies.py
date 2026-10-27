@@ -50,7 +50,8 @@ def declared() -> list[str]:
 def imported() -> set[str]:
     result = subprocess.run(
         ["grep", "-rhoE", r"^\s*(import|from) [a-zA-Z0-9_]+", *[str(ROOT / d) for d in SEARCH if (ROOT / d).is_dir()]],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     return {line.split()[1].split(".")[0] for line in result.stdout.splitlines() if len(line.split()) > 1}
 

@@ -158,9 +158,7 @@ class TestErrorsAreNotFacts:
 class TestTTLPolicy:
     def test_each_class_has_its_own_lifetime(self):
         policy = TTLPolicy()
-        hours = {
-            kind: policy.seconds_for(kind, Disposition.HARMLESS) / 3600 for kind in IndicatorClass
-        }
+        hours = {kind: policy.seconds_for(kind, Disposition.HARMLESS) / 3600 for kind in IndicatorClass}
         assert hours[IndicatorClass.FILE_HASH] > hours[IndicatorClass.DOMAIN]
         assert hours[IndicatorClass.DOMAIN] > hours[IndicatorClass.URL]
         assert hours[IndicatorClass.URL] > hours[IndicatorClass.IP_ADDRESS]

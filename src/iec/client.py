@@ -183,9 +183,7 @@ class EnrichmentClient:
             budget.provider.name: (
                 None
                 if budget.daily_limit is None
-                else self._quota.remaining(
-                    budget.provider.name, budget.daily_limit, budget.daily_window_seconds
-                )
+                else self._quota.remaining(budget.provider.name, budget.daily_limit, budget.daily_window_seconds)
             )
             for budget in self._budgets
         }
@@ -202,9 +200,7 @@ class EnrichmentClient:
             self.stats.latencies_ms.append((self._clock() - started) * 1000)
             return cached
 
-        result, was_coalesced = await self._flight.run_tracked(
-            indicator.key, lambda: self._fetch(indicator)
-        )
+        result, was_coalesced = await self._flight.run_tracked(indicator.key, lambda: self._fetch(indicator))
         if was_coalesced:
             self.stats.coalesced += 1
             # A coalesced answer was produced by somebody else's request, so

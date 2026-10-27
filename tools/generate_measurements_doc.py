@@ -61,7 +61,9 @@ def render(data: dict) -> str:
             f"| {entry['lookups']:,} | {entry['simulated_days_elapsed']:.1f} | "
             f"{entry['cache_hit_rate']:.3f} | {entry['coalesced']:,} | "
             f"{entry['requests_per_1000_lookups']:.1f} | "
-            f"{supported:,} a day |" if supported is not None else "| (no measurement) |"
+            f"{supported:,} a day |"
+            if supported is not None
+            else "| (no measurement) |"
         )
     add("")
     biggest = data["quota_efficiency"][-1]
@@ -79,10 +81,7 @@ def render(data: dict) -> str:
     add("| policy | cache hit rate | requests per 1,000 lookups |")
     add("| --- | --- | --- |")
     for entry in data["ttl_policy"]:
-        add(
-            f"| `{entry['policy']}` | {entry['cache_hit_rate']:.3f} | "
-            f"{entry['requests_per_1000_lookups']:.1f} |"
-        )
+        add(f"| `{entry['policy']}` | {entry['cache_hit_rate']:.3f} | {entry['requests_per_1000_lookups']:.1f} |")
     add("")
     per_class = next(entry for entry in data["ttl_policy"] if entry["policy"] == "per_class_defaults")
     longest = max(data["ttl_policy"], key=lambda entry: entry["cache_hit_rate"])

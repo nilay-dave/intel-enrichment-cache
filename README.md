@@ -1,7 +1,7 @@
 # intel-enrichment-cache
 
-[![CI](https://github.com/__GITHUB_USERNAME__/intel-enrichment-cache/actions/workflows/ci.yml/badge.svg)](https://github.com/__GITHUB_USERNAME__/intel-enrichment-cache/actions/workflows/ci.yml)
-[![coverage](https://img.shields.io/endpoint?url=https://__GITHUB_USERNAME__.github.io/intel-enrichment-cache/badges/coverage.json)](https://__GITHUB_USERNAME__.github.io/intel-enrichment-cache/)
+[![CI](https://github.com/nilay-dave/intel-enrichment-cache/actions/workflows/ci.yml/badge.svg)](https://github.com/nilay-dave/intel-enrichment-cache/actions/workflows/ci.yml)
+[![coverage](https://img.shields.io/endpoint?url=https://nilay-dave.github.io/intel-enrichment-cache/badges/coverage.json)](https://nilay-dave.github.io/intel-enrichment-cache/)
 [![PyPI](https://img.shields.io/pypi/v/intel-enrichment-cache)](https://pypi.org/project/intel-enrichment-cache/)
 [![python](https://img.shields.io/badge/python-3.11%2B-blue)](pyproject.toml)
 [![dependencies](https://img.shields.io/badge/runtime%20dependencies-1-green)](pyproject.toml)
@@ -25,7 +25,7 @@ client = EnrichmentClient(
 )
 
 result = await client.enrich("8.8.8.8")
-print(result.disposition, result.source)   # Disposition.HARMLESS Source.PROVIDER
+print(result.disposition, result.source)  # Disposition.HARMLESS Source.PROVIDER
 ```
 
 ## What it is for
@@ -84,8 +84,8 @@ number that means nothing.
 ```python
 from iec import Rate, ProviderBudget, preset
 
-preset("virustotal-public")      # 4/minute, 500/day, with its source and the date read
-ProviderBudget(provider=vt, rate=Rate(1000, 60.0), daily_limit=50_000)   # your own tier
+preset("virustotal-public")  # 4/minute, 500/day, with its source and the date read
+ProviderBudget(provider=vt, rate=Rate(1000, 60.0), daily_limit=50_000)  # your own tier
 ```
 
 A library that hardcodes a provider's limits is wrong the moment the provider

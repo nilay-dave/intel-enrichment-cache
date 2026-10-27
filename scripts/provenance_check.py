@@ -391,13 +391,18 @@ def check_repo_metadata(report: Report) -> None:
         f"{ROOT.name} is lowercase and hyphenated" if name_ok else f"{ROOT.name} is not lowercase hyphenated",
     )
 
+    # Assembled from parts so this file does not contain the literal
+    # placeholder. tools/set_identity.sh rewrites every occurrence it finds in
+    # a tracked file, so a literal here would be rewritten to the account name,
+    # and this check would then flag every correctly bound file as unresolved.
+    placeholder = "__GITHUB" + "_USERNAME__"
     placeholders = []
     for path in [Path(p) for p in git("ls-files").splitlines() if p]:
         full = ROOT / path
         if not full.is_file():
             continue
         try:
-            if "__GITHUB_USERNAME__" in full.read_text(encoding="utf-8"):
+            if placeholder in full.read_text(encoding="utf-8"):
                 placeholders.append(str(path))
         except (UnicodeDecodeError, OSError):
             continue
@@ -406,7 +411,7 @@ def check_repo_metadata(report: Report) -> None:
         PASS if not placeholders else WEAK,
         "no placeholders remain"
         if not placeholders
-        else f"{len(placeholders)} files still carry __GITHUB_USERNAME__, run tools/set_identity.sh",
+        else f"{len(placeholders)} files still carry {placeholder}, run tools/set_identity.sh",
     )
 
 

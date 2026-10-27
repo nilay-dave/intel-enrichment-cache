@@ -24,12 +24,16 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "pytest-cov>=5.0", "respx>=0.21", "ruff>=0.6", "numpy>=1.26"]
+# ruff is pinned exactly. Its formatter changes how it joins lines between
+# releases, and CI gates on "ruff format --check", so an unpinned floor made
+# that gate depend on the day the build ran rather than on the code: 28 files
+# formatted under 0.6 were reported as unformatted under 0.17.
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "pytest-cov>=5.0", "respx>=0.21", "ruff==0.17.1", "numpy>=1.26"]
 
 [project.urls]
-Homepage = "https://github.com/__GITHUB_USERNAME__/intel-enrichment-cache"
-Documentation = "https://__GITHUB_USERNAME__.github.io/intel-enrichment-cache/"
-Issues = "https://github.com/__GITHUB_USERNAME__/intel-enrichment-cache/issues"
+Homepage = "https://github.com/nilay-dave/intel-enrichment-cache"
+Documentation = "https://nilay-dave.github.io/intel-enrichment-cache/"
+Issues = "https://github.com/nilay-dave/intel-enrichment-cache/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]

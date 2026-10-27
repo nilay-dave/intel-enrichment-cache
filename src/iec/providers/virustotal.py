@@ -119,9 +119,7 @@ class VirusTotal:
         undetected = int(stats.get("undetected") or 0)
         total = malicious + suspicious + harmless + undetected
 
-        disposition = disposition_from_engine_counts(
-            malicious, suspicious, harmless, undetected, self._thresholds
-        )
+        disposition = disposition_from_engine_counts(malicious, suspicious, harmless, undetected, self._thresholds)
         return ProviderVerdict(
             provider=self.name,
             disposition=disposition,
