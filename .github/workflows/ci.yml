@@ -23,7 +23,7 @@ jobs:
       matrix:
         python: ['3.11', '3.12', '3.13']
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # provenance_check.py reads the commit history, which a shallow
           # checkout does not have.
@@ -93,7 +93,7 @@ jobs:
     name: the deterministic experiments are deterministic
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
