@@ -1,11 +1,6 @@
 # intel-enrichment-cache
 
-[![CI](https://github.com/nilay-dave/intel-enrichment-cache/actions/workflows/ci.yml/badge.svg)](https://github.com/nilay-dave/intel-enrichment-cache/actions/workflows/ci.yml)
-[![coverage](https://img.shields.io/endpoint?url=https://nilay-dave.github.io/intel-enrichment-cache/badges/coverage.json)](https://nilay-dave.github.io/intel-enrichment-cache/)
-[![PyPI](https://img.shields.io/pypi/v/intel-enrichment-cache)](https://pypi.org/project/intel-enrichment-cache/)
-[![python](https://img.shields.io/badge/python-3.11%2B-blue)](pyproject.toml)
-[![dependencies](https://img.shields.io/badge/runtime%20dependencies-1-green)](pyproject.toml)
-[![licence](https://img.shields.io/badge/licence-MIT-green)](LICENSE)
+
 
 A threat intelligence client for a SOAR worker, built around the constraint
 that actually bites: a free tier allows a few hundred lookups a day, and an
